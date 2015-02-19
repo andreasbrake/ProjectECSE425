@@ -11,6 +11,21 @@
 
 #include "dictionary.h"
 
+typedef struct rword{
+	char opcode[6];
+	char rs[5];
+	char rt[5];
+	char rd[5];
+	char shamt[5];
+	char funct[6];
+} RWord;
+
+char* EMPTY_WORD = "00000000000000000000000000000000";
+
+char* lineWord;
+int pos = 0;
+int wordType = 0;
+
 char* append(char* str1, char* str2){
 	char* temp = "";
 	if((temp = malloc(strlen(str1)+strlen(str2)+1)) != NULL){
@@ -23,13 +38,68 @@ char* append(char* str1, char* str2){
 	return temp;
 }
 
-char* parse_line(char input[]){
-	char* output = "";
-
-	int readingWord = 0;
-	int instructionRead = 0;
-	int registerRead = 0;
+int add_to_word(char* bin){
+	int len;
 	int i;
+	int offset = 0;
+
+	if(pos == 0){ // opcode (will always be the first thing added independent of instruction type)
+		len = 6;
+		offset = 0;
+	}else{
+		if(wordType == 0){ // R instruction
+			if(pos == 1){ // funct
+				len = 6;
+				offset = 26;
+			}else if(pos == 2){ // rd
+				len = 5;
+				offset = 16;
+			}else if(pos == 3){ // rs
+				len = 5;
+				offset = 6;
+			}else if(pos == 4){ // rt
+				len = 5;
+				offset = 11;
+			}
+		}else if(wordType == 1){ // I instruction
+			if(pos == 1){ // rt
+				len = 5;
+				offset = 11;
+			}else if(pos == 2){ // rs
+				len = 5;
+				offset = 6;
+			}else if(pos == 3){ // immediate
+				len = 16;
+				offset = 16;
+			}
+		}else if(wordType == 2){ // J instruction
+			if(pos == 1){ // address
+				len = 26;
+				offset = 6;
+			}
+		}
+	}
+
+	for(i=0; i<len; i++){
+		lineWord[(offset+i)] = bin[i];
+	}
+
+	pos++;
+	return 0;
+}
+
+int parse_line(char input[]){
+	lineWord = (char*)malloc(32);
+	int i;
+	for(i=0; i<32; i++){
+		lineWord[i] = '0';
+	}
+	lineWord[32] = '\0';
+	wordType = 0;
+	pos = 0;
+
+	int instructionRead = 0;
+	int readingWord = 0;
 
 	char inst[32];
 	inst[0] = '\0';
@@ -38,32 +108,15 @@ char* parse_line(char input[]){
 		if(input[i] == '#') // Line is over if comment begins
 			break;
 		else if(input[i] == ':'){ // line flag
-			output = append(output, inst);
-			output = append(output, " ");
 			readingWord = 0;
 			inst[0] = '\0';
 			continue;
 		}
 		else if(input[i] == ','){ // End of register or value
-			char out[] = "000000";
-			if(registerRead){
-				int regnum = atoi(inst);
-				out[5] = (regnum & 1) + '0';
-				regnum >>= 1;
-				out[4] = (regnum & 1) + '0';
-				regnum >>= 1;
-				out[3] = (regnum & 1) + '0';
-				regnum >>= 1;
-				out[2] = (regnum & 1) + '0';
-				regnum >>= 1;
-				out[1] = (regnum & 1) + '0';
-				regnum >>= 1;
-				out[0] = regnum + '0';
+			char* word = malloc(5);
+			convert_to_binary(inst, 5, &word);
+			add_to_word(word);
 
-				registerRead = 0;
-			}
-
-			output = append(output, out);
 			readingWord = 0;
 			inst[0] = '\0';
 			continue;
@@ -71,23 +124,23 @@ char* parse_line(char input[]){
 		else if(input[i] == ' '){ // End of opcode or just whitespace
 			if(readingWord){
 				if(!instructionRead){
+					char* opcode = "";
+					char* function = "";
+
+					wordType = convert_instruction(inst, &opcode, &function);
+					add_to_word(opcode);
+					if(wordType == 0){
+						add_to_word(function);
+					}
+
 					instructionRead = 1;
-					char* word = convert_instruction(inst);
-					output = append(output, word);
-				}else{
-					output = append(output, " ");
-					output = append(output, inst);
-					output = append(output, " ");
+					inst[0] = '\0';
 				}
-
 				readingWord = 0;
-
-				inst[0] = '\0';
 			}
 			continue;
 		}
 		else if(input[i] == '$'){
-			registerRead = 1;
 			continue;
 		}
 		else{
@@ -98,21 +151,28 @@ char* parse_line(char input[]){
 		}
 	}
 	if(inst[0] != '\0'){
-
+		char* thing = ""; // either rt, immediate, or address depending on instruction type
+		if(wordType == 0){
+			convert_to_binary(inst, 5, &thing);
+		}else if(wordType == 1){
+			convert_to_binary(inst, 16, &thing);
+		}else if(wordType == 2){
+			convert_to_binary(inst, 26, &thing);
+		}else{
+			printf("ERROR!");
+		}
+		if(strcmp(thing, ""))
+			add_to_word(thing);
 	}
 
-	printf("%s\n", output);
-
-	return output;
+	return 0;
 }
 
-int main(int argc, char* argv[]){
-	init_dictionary();
-
+int parse_file(char* filename, int mode){
     char ch;
     FILE *fp;
 
-    fp = fopen(argv[1],"r");
+    fp = fopen(filename,"r");
     if( fp == NULL ){
         perror("Error while opening the file.\n");
         exit(EXIT_FAILURE);
@@ -122,8 +182,10 @@ int main(int argc, char* argv[]){
     while( ( ch = fgetc(fp) ) != EOF ){
     	if(ch == '\n'){
     		// Parse line / convert
-			char* output = parse_line(line);
-			//printf("%s \n", output);
+			parse_line(line);
+			if(strcmp(lineWord, EMPTY_WORD))
+				printf("%s\n", lineWord);
+
 			line[0] = '\0'; // Empty array
 		}
     	else{
@@ -135,5 +197,12 @@ int main(int argc, char* argv[]){
     }
 
     fclose(fp);
+
+    return 0;
+}
+int main(int argc, char* argv[]){
+	init_dictionary();
+	parse_file(argv[1], 0);
+
     return 0;
 }

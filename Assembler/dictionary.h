@@ -9,7 +9,7 @@
 #define DICTIONARY_H_
 
 int init_dictionary();
-char* convert_instruction(char*);
-char* convert_register(char*);
+int convert_instruction(char* instruction, char** opcode, char** function);
+int convert_to_binary(char* numchar, int length, char** bin);
 
 #endif /* DICTIONARY_H_ */

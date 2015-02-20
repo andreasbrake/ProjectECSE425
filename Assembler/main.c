@@ -93,6 +93,7 @@ int parse_line(char input[]){
 
     int instructionRead = 0;
     int readingWord = 0;
+    int parenParse = 0;
 
     char inst[32];
     inst[0] = '\0';
@@ -135,7 +136,16 @@ int parse_line(char input[]){
             }
             continue;
         }
+        else if(input[i] == '(' || input[i] == ')'){
+        	parenParse = 1;
+        	continue;
+        }
         else if(input[i] == '$'){
+        	if(parenParse){
+        		int len = strlen(inst);
+				inst[len] = input[i];
+				inst[len+1] = '\0';
+        	}
             continue;
         }
         else{
@@ -150,7 +160,20 @@ int parse_line(char input[]){
         if(wordType == 0){
             convert_to_binary(lineNumber, inst, 5, &thing);
         }else if(wordType == 1){
-            convert_to_binary(lineNumber, inst, 16, &thing);
+        	if(parenParse){ // parsing something in the form cc($reg)
+        		char* rs = "";
+        		char* rsbin = "";
+        		char* immed = "";
+
+        		paren_parse(inst, strlen(inst), &rs, &immed);
+
+        		convert_to_binary(lineNumber, rs, 5, &rsbin);
+        		convert_to_binary(lineNumber, immed, 16, &thing);
+
+        		add_to_word(rsbin);
+        	}
+        	else
+        		convert_to_binary(lineNumber, inst, 16, &thing);
         }else if(wordType == 2){
             convert_to_binary(lineNumber, inst, 26, &thing);
         }else{
@@ -176,7 +199,7 @@ int parse_line_labels(char input[]){
             label[0] = '\0';
 
         }
-        else if(input[i] != ' '){
+        else if(input[i] != ' ' && input[i] != '\t'){
             int len = strlen(label);
             label[len] = input[i];
             label[len+1] = '\0';

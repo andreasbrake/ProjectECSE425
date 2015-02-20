@@ -7,6 +7,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <malloc.h>
 
 #define LABEL_LEN 16
@@ -60,7 +61,7 @@ int convert_instruction(char* instruction, char** opcode, char** function){
         }
     }
 
-    printf("looking for %s", instruction);
+    printf("can't find instruction %s", instruction);
     return -1;
 }
 int convert_to_binary(int linenum, char* numchar, int length, char** bin){
@@ -71,9 +72,8 @@ int convert_to_binary(int linenum, char* numchar, int length, char** bin){
         int i;
         for(i=0; i < NUM_OF_R; i++){
             if(!strcmp((char*)&labels[i].label, numchar)){
-                num = labels[i].line - linenum;
-                if(num > 0)
-                    num--;
+                num = labels[i].line - linenum - 1;
+                printf("branching from line %d to %d (jump by %d)\n", linenum, labels[i].line, num);
                 break;
             }
         }
@@ -102,6 +102,39 @@ int convert_to_binary(int linenum, char* numchar, int length, char** bin){
     return 0;
 }
 
+int paren_parse(char* input, int len, char** reg, char** constant){
+	int i;
+	int isreg = 0;
+
+	char* regT = (char*)malloc(sizeof(char));
+	char* conT = (char*)malloc(sizeof(char));
+	int ri = 0;
+	int ci = 0;
+
+	for(i=0; i<len; i++){
+		char c = input[i];
+		if(c == '$')
+			isreg = 1;
+		else if(isreg){
+			regT = (char*)realloc(regT, (ri+1) * sizeof(char));
+			regT[ri] = c;
+			ri++;
+		}
+		else{
+			conT = (char*)realloc(conT, (ci+1) * sizeof(char));
+			conT[ci] = c;
+			ci++;
+		}
+	}
+
+	*reg = (char*)malloc(ri * sizeof(char));
+	*reg = regT;
+
+	*constant = (char*)malloc(ci * sizeof(char));
+	*constant = conT;
+
+	return 0;
+}
 int add_label(char** label, int lineNumber){
     Label newLabel;
     newLabel.label = (char**)*label;

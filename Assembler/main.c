@@ -191,16 +191,19 @@ int parse_line_labels(char input[]){
 
 int parse_file(char* filename, int mode){
     char ch;
-    FILE *fp;
+    FILE *readFile;
+    FILE *writeFile;
 
-    fp = fopen(filename,"r");
-    if( fp == NULL ){
+    readFile = fopen(filename,"r");
+    writeFile = fopen("output.bin", "w");
+
+    if( readFile == NULL || writeFile == NULL){
         perror("Error while opening the file.\n");
         exit(EXIT_FAILURE);
     }
 
     char line[256] = "";
-    while( ( ch = fgetc(fp) ) != EOF ){
+    while( ( ch = fgetc(readFile) ) != EOF ){
     	if(ch == '\n'){
     		// Parse line / label
 
@@ -210,12 +213,13 @@ int parse_file(char* filename, int mode){
     		}
     		else{
     			parse_line(line);
-    			if(strcmp(lineWord, EMPTY_WORD))
+    			if(strcmp(lineWord, EMPTY_WORD)){
     				printf("%s\n", lineWord);
+    				fprintf(writeFile,"%s\n", lineWord);
+    			}
 
     			line[0] = '\0'; // Empty array
     		}
-
 		}
     	else{
     		// Append ch to the line
@@ -225,7 +229,8 @@ int parse_file(char* filename, int mode){
     	}
     }
 
-    fclose(fp);
+    fclose(writeFile);
+    fclose(readFile);
 
     lineNumber = -1;
     return 0;

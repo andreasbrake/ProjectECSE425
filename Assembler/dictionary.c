@@ -9,23 +9,34 @@
 #include <stdio.h>
 #include <malloc.h>
 
+#define LABEL_LEN 16
+
 #define NUM_OF_R 4
 #define NUM_OF_I 12
 #define NUM_OF_J 2
 
-typedef struct op {
+typedef struct {
+	char** label;
+	int line;
+} Label;
+
+typedef struct {
     char* key;
     char* opcode;
     char* function;
 } Opfun;
 
+Label* labels;
+
 Opfun opcodesR[NUM_OF_R];
 Opfun opcodesI[NUM_OF_I];
 Opfun opcodesJ[NUM_OF_J];
 
-int pairsR = 0;
-int pairsI = 0;
-int pairsJ = 0;
+int lblnum = 0; // number of lables for add_label
+
+int pairsR = 0; // counters for adding opcodes in add_key_val
+int pairsI = 0; // ..
+int pairsJ = 0; // ..
 
 int convert_instruction(char* instruction, char** opcode, char** function){
 	int i;
@@ -52,11 +63,26 @@ int convert_instruction(char* instruction, char** opcode, char** function){
 	printf("looking for %s", instruction);
 	return -1;
 }
-int convert_to_binary(char* numchar, int length, char** bin){
+int convert_to_binary(int linenum, char* numchar, int length, char** bin){
+	int num = 0;
+	int res = sscanf(numchar, "%d", &num);
+
+	if(res == 0){
+		int i;
+		for(i=0; i < NUM_OF_R; i++){
+			if(!strcmp((char*)&labels[i].label, numchar)){
+				num = labels[i].line - linenum;
+				if(num > 0)
+					num--;
+				break;
+			}
+		}
+	}else{
+		num = atoi(numchar);
+	}
+
 	char binNum[length];
 	binNum[0] = '\0';
-
-	int num = atoi(numchar);
 
 	int i;
 	for(i=(length-1); i>=0; i--){
@@ -76,6 +102,17 @@ int convert_to_binary(char* numchar, int length, char** bin){
 	return 0;
 }
 
+int add_label(char** label, int lineNumber){
+	Label newLabel;
+	newLabel.label = (char**)*label;
+	newLabel.line = lineNumber;
+
+	labels = (Label*)realloc(labels, (lblnum+1) * sizeof(newLabel));
+	labels[lblnum] = newLabel;
+
+	lblnum ++;
+	return 0;
+}
 int add_key_val(char* key, char* opcode, char* function, char* type){
 	Opfun op;
 	op.key = key;
@@ -97,7 +134,6 @@ int add_key_val(char* key, char* opcode, char* function, char* type){
 
 	return 0;
 }
-
 
 int init_dictionary(){
 	add_key_val("j",    "000010", "", "J");
@@ -122,5 +158,6 @@ int init_dictionary(){
 	add_key_val("jr",   "000000", "001000", "R");
 	add_key_val("mflo", "000000", "010010", "R");
 	add_key_val("mult", "000000", "011000", "R");
+
 	return 0;
 }

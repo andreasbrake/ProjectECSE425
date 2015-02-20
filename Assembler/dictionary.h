@@ -9,7 +9,8 @@
 #define DICTIONARY_H_
 
 int init_dictionary();
+int add_label(char* label, int lineNumber);
 int convert_instruction(char* instruction, char** opcode, char** function);
-int convert_to_binary(char* numchar, int length, char** bin);
+int convert_to_binary(int linenum, char* numchar, int length, char** bin);
 
 #endif /* DICTIONARY_H_ */

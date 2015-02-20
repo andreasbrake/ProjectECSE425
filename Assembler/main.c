@@ -11,16 +11,9 @@
 
 #include "dictionary.h"
 
-typedef struct rword{
-	char opcode[6];
-	char rs[5];
-	char rt[5];
-	char rd[5];
-	char shamt[5];
-	char funct[6];
-} RWord;
+#define EMPTY_WORD "00000000000000000000000000000000"
 
-char* EMPTY_WORD = "00000000000000000000000000000000";
+int lineNumber = 0;
 
 char* lineWord;
 int pos = 0;
@@ -114,14 +107,14 @@ int parse_line(char input[]){
 		}
 		else if(input[i] == ','){ // End of register or value
 			char* word = malloc(5);
-			convert_to_binary(inst, 5, &word);
+			convert_to_binary(lineNumber, inst, 5, &word);
 			add_to_word(word);
 
 			readingWord = 0;
 			inst[0] = '\0';
 			continue;
 		}
-		else if(input[i] == ' '){ // End of opcode or just whitespace
+		else if(input[i] == ' ' || input[i] == '\t'){ // End of opcode or just whitespace
 			if(readingWord){
 				if(!instructionRead){
 					char* opcode = "";
@@ -134,6 +127,8 @@ int parse_line(char input[]){
 					}
 
 					instructionRead = 1;
+					lineNumber++;
+
 					inst[0] = '\0';
 				}
 				readingWord = 0;
@@ -153,11 +148,11 @@ int parse_line(char input[]){
 	if(inst[0] != '\0'){
 		char* thing = ""; // either rt, immediate, or address depending on instruction type
 		if(wordType == 0){
-			convert_to_binary(inst, 5, &thing);
+			convert_to_binary(lineNumber, inst, 5, &thing);
 		}else if(wordType == 1){
-			convert_to_binary(inst, 16, &thing);
+			convert_to_binary(lineNumber, inst, 16, &thing);
 		}else if(wordType == 2){
-			convert_to_binary(inst, 26, &thing);
+			convert_to_binary(lineNumber, inst, 26, &thing);
 		}else{
 			printf("ERROR!");
 		}
@@ -165,6 +160,32 @@ int parse_line(char input[]){
 			add_to_word(thing);
 	}
 
+	return 0;
+}
+int parse_line_labels(char input[]){
+	int i;
+
+	char label[32];
+	label[0] = '\0';
+
+	for(i=0; i<strlen(input); i++){
+		if(input[i] == '#') // Line is over if comment begins
+			break;
+		else if(input[i] == ':'){ // line label
+			add_label(&label[0], lineNumber);
+			label[0] = '\0';
+
+		}
+		else if(input[i] != ' '){
+			int len = strlen(label);
+			label[len] = input[i];
+			label[len+1] = '\0';
+		}
+	}
+
+	if(label[0] != '\0'){
+		lineNumber++;
+	}
 	return 0;
 }
 
@@ -181,12 +202,20 @@ int parse_file(char* filename, int mode){
     char line[256] = "";
     while( ( ch = fgetc(fp) ) != EOF ){
     	if(ch == '\n'){
-    		// Parse line / convert
-			parse_line(line);
-			if(strcmp(lineWord, EMPTY_WORD))
-				printf("%s\n", lineWord);
+    		// Parse line / label
 
-			line[0] = '\0'; // Empty array
+    		if(mode == 0){
+    			parse_line_labels(line);
+    			line[0] = '\0'; // Empty array
+    		}
+    		else{
+    			parse_line(line);
+    			if(strcmp(lineWord, EMPTY_WORD))
+    				printf("%s\n", lineWord);
+
+    			line[0] = '\0'; // Empty array
+    		}
+
 		}
     	else{
     		// Append ch to the line
@@ -198,11 +227,15 @@ int parse_file(char* filename, int mode){
 
     fclose(fp);
 
+    lineNumber = -1;
     return 0;
 }
+
 int main(int argc, char* argv[]){
+
+	parse_file(argv[1], 0); // parse for labels
 	init_dictionary();
-	parse_file(argv[1], 0);
+	parse_file(argv[1], 1); // parse for everything else
 
     return 0;
 }

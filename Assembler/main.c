@@ -96,8 +96,9 @@ int parse_line(char input[]){
 
     // Iterate over all the characters in the line
     for(i=0; i<strlen(input); i++){
-        if(input[i] == '#')                 // Line is over if comment begins
+        if(input[i] == '#'){                 // Line is over if comment begins
             break;
+        }
         else if(input[i] == ':'){           // line label (don't read here)
             readingWord = 0;
             inst[0] = '\0';
@@ -194,7 +195,8 @@ int parse_line(char input[]){
 int parse_line_labels(char input[]){
     int i;
 
-    char label[32];
+    //char label[32];
+    char* label = malloc(32 * sizeof(char));
     label[0] = '\0';
 
     // Iterate over each character in the line
@@ -202,9 +204,8 @@ int parse_line_labels(char input[]){
         if(input[i] == '#') // Line is over if comment begins
             break;
         else if(input[i] == ':'){ // line label has been read
-            add_label(&label[0], lineNumber); // Record the label and its location
-            label[0] = '\0'; // Clear label array
-
+            add_label(label, lineNumber); // Record the label and its location
+            break;
         }
         else if(input[i] != ' ' && input[i] != '\t'){ // Don't record spaces or tabs
             int len = strlen(label);
@@ -213,11 +214,11 @@ int parse_line_labels(char input[]){
         }
     }
 
-
     // Iterate the line number if something exists on the line
     if(label[0] != '\0'){
         lineNumber++;
     }
+
     return 0;
 }
 
@@ -242,14 +243,14 @@ int parse_file(char* filename, int mode){
 
     // Loop through each line of the file and write the content to line
     while( ( ch = fgetc(readFile) ) != EOF ){
-        if(ch == '\n' || ch == '#'){ // If the line ends with a new line or a comment
+        if(ch == '\n'){ // If the line ends with a new line or a comment
             if(mode == 0){
                 parse_line_labels(line); // Parse line for label information
             }
             else{
                 parse_line(line); // Parse line for general content
                 if(strcmp(lineWord, EMPTY_WORD)){ // If the line is empty then don't write it
-                    //printf("%s\n", lineWord); // For debugging
+                    printf("%s\n", lineWord); // For debugging
                     fprintf(writeFile,"%s\n", lineWord); // Write to the write file
                 }
             }

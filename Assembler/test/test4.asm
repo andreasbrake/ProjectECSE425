@@ -1,4 +1,4 @@
- Differences between bitwise and logical operators (& vs &&, | vs ||)
+# Differences between bitwise and logical operators (& vs &&, | vs ||)
 # $1: x = 3
 # $2: y = 4
 # $3: z = x & y    */ bitwise AND: 0...0011 and 0...0100 = 0...0 /*

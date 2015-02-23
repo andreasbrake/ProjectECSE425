@@ -17,7 +17,7 @@
 
 // Label structure consisting of the label name pointer line number
 typedef struct {
-    char** label;
+    char* label;
     int line;
 } Label;
 
@@ -82,7 +82,7 @@ int convert_to_binary(int linenum, char* numchar, int length, char** bin){
         int i;
         // Loop over all the labels recorded
         for(i=0; i < lblnum; i++){
-            if(!strcmp((char*)&labels[i].label, numchar)){
+            if(!strcmp((char*)labels[i].label, numchar)){
                 // Get the line difference between current line and label location
                 num = labels[i].line - linenum - 1; 
                 //printf("branching from line %d to %d (jump by %d)\n", linenum, labels[i].line, num);
@@ -90,7 +90,7 @@ int convert_to_binary(int linenum, char* numchar, int length, char** bin){
             }
         }
         if(i >= lblnum){    // Label hasn't been recorded (typo by user perhaps)
-            printf("ERROR!! Label %s not found", numchar);
+            printf("ERROR!! Label %s not found\n", numchar);
             return 0;            
         }
     }else{          // If it's numeric, then convert it to a number
@@ -163,13 +163,15 @@ int paren_parse(char* input, int len, char** reg, char** constant){
 }
 
 // Add a label and line numbmer to the list of labels
-int add_label(char** label, int lineNumber){
+int add_label(char* label, int lineNumber){
     Label newLabel;
-    newLabel.label = (char**)*label;
+    newLabel.label = (char*)label;
     newLabel.line = lineNumber;
 
     labels = (Label*)realloc(labels, (lblnum+1) * sizeof(newLabel));
     labels[lblnum] = newLabel;
+
+    //printf("adding #%d, %s at %d\n", lblnum, labels[lblnum].label, lineNumber);
 
     lblnum ++;
     return 0;

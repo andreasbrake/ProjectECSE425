@@ -19,18 +19,8 @@ char* lineWord;
 int pos = 0;
 int wordType = 0;
 
-char* append(char* str1, char* str2){
-    char* temp = "";
-    if((temp = malloc(strlen(str1)+strlen(str2)+1)) != NULL){
-        temp[0] = '\0';
-        strcat(temp,str1);
-        strcat(temp,str2);
-    } else{
-        printf("ERROR APPENDING STRING");
-    }
-    return temp;
-}
-
+// Add a binary instruction to the current binary line word
+// Certain order for each part being read
 int add_to_word(char* bin){
     int len;
     int i;
@@ -81,13 +71,19 @@ int add_to_word(char* bin){
     return 0;
 }
 
+// The main parsing function of the program
+// This takes the input[] as an array of the line characters
 int parse_line(char input[]){
-    lineWord = (char*)malloc(32);
+    lineWord = (char*)malloc(32); // Allocate memory for the binary line
+
+    // Initialize the binary line
     int i;
     for(i=0; i<32; i++){
         lineWord[i] = '0';
     }
     lineWord[32] = '\0';
+
+    // Initialize values
     wordType = 0;
     pos = 0;
 
@@ -98,49 +94,52 @@ int parse_line(char input[]){
     char inst[32];
     inst[0] = '\0';
 
+    // Iterate over all the characters in the line
     for(i=0; i<strlen(input); i++){
-        if(input[i] == '#') // Line is over if comment begins
+        if(input[i] == '#')                 // Line is over if comment begins
             break;
-        else if(input[i] == ':'){ // line flag
+        else if(input[i] == ':'){           // line label (don't read here)
             readingWord = 0;
             inst[0] = '\0';
             continue;
         }
-        else if(input[i] == ','){ // End of register or value
-            char* word = malloc(5);
-            convert_to_binary(lineNumber, inst, 5, &word);
-            add_to_word(word);
+        else if(input[i] == ','){           // End of register or value
+            char* word = malloc(5);         // allocate memory for the register/immediate/etc
+            convert_to_binary(lineNumber, inst, 5, &word);  // Convert it to binary
+            add_to_word(word);              // Add it to the binary line
 
+            // Reset recording
             readingWord = 0;
             inst[0] = '\0';
             continue;
         }
-        else if(input[i] == ' ' || input[i] == '\t'){ // End of opcode or just whitespace
-            if(readingWord){
-                if(!instructionRead){
+        else if(input[i] == ' ' || input[i] == '\t'){       // End of opcode or just whitespace
+            if(readingWord){                // If there is a word being read
+                if(!instructionRead){       // If the opcode has not yet been read, then this is it
                     char* opcode = "";
                     char* function = "";
 
+                    // Get the binary version of the opcode
                     wordType = convert_instruction(inst, &opcode, &function);
-                    add_to_word(opcode);
-                    if(wordType == 0){
-                        add_to_word(function);
+                    add_to_word(opcode);    // Add the opcode to the binary word
+                    if(wordType == 0){      // If the word is an R type word
+                        add_to_word(function);              // Add the function to the binary word
                     }
 
+                    // Set/Reset values and increment the line number
                     instructionRead = 1;
                     lineNumber++;
-
                     inst[0] = '\0';
                 }
                 readingWord = 0;
             }
             continue;
         }
-        else if(input[i] == '(' || input[i] == ')'){
+        else if(input[i] == '(' || input[i] == ')'){        // Set parenParse flag if a parenthesis is read
         	parenParse = 1;
         	continue;
         }
-        else if(input[i] == '$'){
+        else if(input[i] == '$'){           // If a register is being read then only add it if a parenParse is set 
         	if(parenParse){
         		int len = strlen(inst);
 				inst[len] = input[i];
@@ -148,70 +147,83 @@ int parse_line(char input[]){
         	}
             continue;
         }
-        else{
+        else{                               // Add the current character to the current thing being read and set readingWord flag
             int len = strlen(inst);
             inst[len] = input[i];
             inst[len+1] = '\0';
             readingWord = 1;
         }
     }
+
+    // Parse anything remaining once the line has been read (final part of word)
     if(inst[0] != '\0'){
-        char* thing = ""; // either rt, immediate, or address depending on instruction type
+        char* thing = "";                   // either rt, immediate, or address depending on instruction type
         if(wordType == 0){
             convert_to_binary(lineNumber, inst, 5, &thing);
-        }else if(wordType == 1){
-        	if(parenParse){ // parsing something in the form cc($reg)
+        }else if(wordType == 1){            // I type instruction
+        	if(parenParse){                 // parsing something in the form cc($reg)
         		char* rs = "";
         		char* rsbin = "";
         		char* immed = "";
 
-        		paren_parse(inst, strlen(inst), &rs, &immed);
+        		paren_parse(inst, strlen(inst), &rs, &immed); // Parse out register and immediate
 
+                // Add them to the binary line word
         		convert_to_binary(lineNumber, rs, 5, &rsbin);
         		convert_to_binary(lineNumber, immed, 16, &thing);
 
         		add_to_word(rsbin);
         	}
-        	else
+        	else{                           // Any other Immediate to be read (can be normally converted)
         		convert_to_binary(lineNumber, inst, 16, &thing);
-        }else if(wordType == 2){
+            }
+        }else if(wordType == 2){            // R type instruction
             convert_to_binary(lineNumber, inst, 26, &thing);
         }else{
             printf("ERROR!");
         }
-        if(strcmp(thing, ""))
+        if(strcmp(thing, ""))               // Add immediate/rs to word
             add_to_word(thing);
     }
 
     return 0;
 }
+
+// This function parses the line for label information
+// input[] is the line data
 int parse_line_labels(char input[]){
     int i;
 
     char label[32];
     label[0] = '\0';
 
+    // Iterate over each character in the line
     for(i=0; i<strlen(input); i++){
         if(input[i] == '#') // Line is over if comment begins
             break;
-        else if(input[i] == ':'){ // line label
-            add_label(&label[0], lineNumber);
-            label[0] = '\0';
+        else if(input[i] == ':'){ // line label has been read
+            add_label(&label[0], lineNumber); // Record the label and its location
+            label[0] = '\0'; // Clear label array
 
         }
-        else if(input[i] != ' ' && input[i] != '\t'){
+        else if(input[i] != ' ' && input[i] != '\t'){ // Don't record spaces or tabs
             int len = strlen(label);
             label[len] = input[i];
             label[len+1] = '\0';
         }
     }
 
+
+    // Iterate the line number if something exists on the line
     if(label[0] != '\0'){
         lineNumber++;
     }
     return 0;
 }
 
+// Parse_file takes in the name of the file to be parsed and the parsing mode
+// Mode: 0 indicates that the program is looking for and recording labels
+// Mode: 1 indicates that the program is parsing the general content of the lines
 int parse_file(char* filename, int mode){
     char ch;
     FILE *readFile;
@@ -225,37 +237,37 @@ int parse_file(char* filename, int mode){
         exit(EXIT_FAILURE);
     }
 
+    // Assumes that each line is no longer than 256 characters
     char line[256] = "";
-    while( ( ch = fgetc(readFile) ) != EOF ){
-        if(ch == '\n'){
-            // Parse line / label
 
+    // Loop through each line of the file and write the content to line
+    while( ( ch = fgetc(readFile) ) != EOF ){
+        if(ch == '\n' || ch == '#'){ // If the line ends with a new line or a comment
             if(mode == 0){
-                parse_line_labels(line);
-                line[0] = '\0'; // Empty array
+                parse_line_labels(line); // Parse line for label information
             }
             else{
-                parse_line(line);
-                if(strcmp(lineWord, EMPTY_WORD)){
-                    printf("%s\n", lineWord);
-                    fprintf(writeFile,"%s\n", lineWord);
+                parse_line(line); // Parse line for general content
+                if(strcmp(lineWord, EMPTY_WORD)){ // If the line is empty then don't write it
+                    //printf("%s\n", lineWord); // For debugging
+                    fprintf(writeFile,"%s\n", lineWord); // Write to the write file
                 }
-
-                line[0] = '\0'; // Empty array
             }
+
+            line[0] = '\0'; // Clear the line array
         }
         else{
-            // Append ch to the line
+            // Append ch to the line array
             int len = strlen(line);
             line[len] = ch;
             line[len+1] = '\0';
         }
     }
 
-    if(line[0] != '\n'){
+    // If the final line does not end with a comment then this will handle the final line
+    if(line[0] != '\n'){  
         if(mode == 0){
             parse_line_labels(line);
-            line[0] = '\0'; // Empty array
         }
         else{
             parse_line(line);
@@ -263,22 +275,22 @@ int parse_file(char* filename, int mode){
                 printf("%s\n", lineWord);
                 fprintf(writeFile,"%s\n", lineWord);
             }
-
-            line[0] = '\0'; // Empty array
         }
+        line[0] = '\0';
     }
 
+    // Close files
     fclose(writeFile);
     fclose(readFile);
 
-    lineNumber = -1;
+    lineNumber = -1; // Reset line number
     return 0;
 }
 
 int main(int argc, char* argv[]){
 
     parse_file(argv[1], 0); // parse for labels
-    init_dictionary();
+    init_dictionary();      // Initialize the dictionary of opcodes
     parse_file(argv[1], 1); // parse for everything else
 
     return 0;

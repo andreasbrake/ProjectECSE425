@@ -10,25 +10,28 @@
 #include <stdlib.h>
 #include <malloc.h>
 
-#define LABEL_LEN 16
-
+// Number of opcodes being added to the dictionary of each type
 #define NUM_OF_R 37
 #define NUM_OF_I 36
 #define NUM_OF_J 2
 
+// Label structure consisting of the label name pointer line number
 typedef struct {
     char** label;
     int line;
 } Label;
 
+// Opcode/Function to binary conversion structure
 typedef struct {
     char* key;
     char* opcode;
     char* function;
 } Opfun;
 
+// Poiner relating to the list of labels and their line numbers
 Label* labels;
 
+// Opcode/Function conversions of each different type
 Opfun opcodesR[NUM_OF_R];
 Opfun opcodesI[NUM_OF_I];
 Opfun opcodesJ[NUM_OF_J];
@@ -39,6 +42,11 @@ int pairsR = 0; // counters for adding opcodes in add_key_val
 int pairsI = 0; // ..
 int pairsJ = 0; // ..
 
+// Converts opcode or function to its binary equivalent
+// Returns the type of instruction
+// R type: 0
+// I type: 1
+// J type: 2
 int convert_instruction(char* instruction, char** opcode, char** function){
     int i;
     for(i=0; i < NUM_OF_R; i++){
@@ -64,23 +72,32 @@ int convert_instruction(char* instruction, char** opcode, char** function){
     printf("can't find instruction %s", instruction);
     return -1;
 }
+
+// Convert value to binary
 int convert_to_binary(int linenum, char* numchar, int length, char** bin){
     int num = 0;
-    int res = sscanf(numchar, "%d", &num);
+    int res = sscanf(numchar, "%d", &num); // Check if value is numeric
 
-    if(res == 0){
+    if(res == 0){   // If it's not numeric, then it's a label
         int i;
-        for(i=0; i < NUM_OF_R; i++){
+        // Loop over all the labels recorded
+        for(i=0; i < lblnum; i++){
             if(!strcmp((char*)&labels[i].label, numchar)){
-                num = labels[i].line - linenum - 1;
-                printf("branching from line %d to %d (jump by %d)\n", linenum, labels[i].line, num);
+                // Get the line difference between current line and label location
+                num = labels[i].line - linenum - 1; 
+                //printf("branching from line %d to %d (jump by %d)\n", linenum, labels[i].line, num);
                 break;
             }
         }
-    }else{
+        if(i >= lblnum){    // Label hasn't been recorded (typo by user perhaps)
+            printf("ERROR!! Label %s not found", numchar);
+            return 0;            
+        }
+    }else{          // If it's numeric, then convert it to a number
         num = atoi(numchar);
     }
 
+    // Convert integer to a binary number
     char binNum[length];
     binNum[0] = '\0';
 
@@ -97,44 +114,55 @@ int convert_to_binary(int linenum, char* numchar, int length, char** bin){
     tempbin[0] = '\0';
     strcpy(tempbin, binNum);
 
+    // Set and return
     *bin = tempbin;
 
     return 0;
 }
 
+// Parse out registers and immediate from parenthesized instruction
 int paren_parse(char* input, int len, char** reg, char** constant){
 	int i;
 	int isreg = 0;
 
+    // Initialize
 	char* regT = (char*)malloc(sizeof(char));
 	char* conT = (char*)malloc(sizeof(char));
 	int ri = 0;
 	int ci = 0;
 
+    // Loop throught instruction
 	for(i=0; i<len; i++){
 		char c = input[i];
-		if(c == '$')
+		if(c == '$'){
 			isreg = 1;
-		else if(isreg){
+        }
+		else if(isreg){   // Add to register
 			regT = (char*)realloc(regT, (ri+1) * sizeof(char));
 			regT[ri] = c;
 			ri++;
 		}
-		else{
+		else{             // Add to immediate
 			conT = (char*)realloc(conT, (ci+1) * sizeof(char));
 			conT[ci] = c;
 			ci++;
 		}
 	}
 
+    // Return values
 	*reg = (char*)malloc(ri * sizeof(char));
 	*reg = regT;
 
 	*constant = (char*)malloc(ci * sizeof(char));
 	*constant = conT;
 
+    //    free(regT);
+    //    free(conT);
+
 	return 0;
 }
+
+// Add a label and line numbmer to the list of labels
 int add_label(char** label, int lineNumber){
     Label newLabel;
     newLabel.label = (char**)*label;
@@ -146,6 +174,8 @@ int add_label(char** label, int lineNumber){
     lblnum ++;
     return 0;
 }
+
+// Add opcode and binary conversion to the list
 int add_key_val(char* key, char* opcode, char* type){
     Opfun op;
     op.key = key;
@@ -176,6 +206,8 @@ int add_key_val(char* key, char* opcode, char* type){
     return 0;
 }
 
+// Initilize R type opcodes
+// R1 are with a function and opcode 000000
 int init_R1_codes(){
     add_key_val("sll",  "000000", "R1");
     add_key_val("srl",  "000010", "R1");
@@ -228,7 +260,8 @@ int init_R1_codes(){
     return 0;
 }
 
-int init_I_codes(){
+// Initilize I type opcodes
+int init_I_codes(){ 
     add_key_val("beq",  "000100", "I");
     add_key_val("bne",  "000101", "I");
     add_key_val("blez", "000110", "I");
@@ -278,19 +311,20 @@ int init_I_codes(){
 
     return 0;
 }
-int init_J_codes(){
+// Initilize J type opcodes
+int init_J_codes(){ 
     add_key_val("j",    "000010", "J");
     add_key_val("jal",  "000011", "J");
 
     return 0;
 }
+
+// Initialize all the opcodes
 int init_dictionary(){
 
     init_R1_codes();
     init_I_codes();
     init_J_codes();
-
-
 
     return 0;
 }

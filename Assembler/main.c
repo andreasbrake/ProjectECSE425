@@ -252,6 +252,22 @@ int parse_file(char* filename, int mode){
         }
     }
 
+    if(line[0] != '\n'){
+        if(mode == 0){
+            parse_line_labels(line);
+            line[0] = '\0'; // Empty array
+        }
+        else{
+            parse_line(line);
+            if(strcmp(lineWord, EMPTY_WORD)){
+                printf("%s\n", lineWord);
+                fprintf(writeFile,"%s\n", lineWord);
+            }
+
+            line[0] = '\0'; // Empty array
+        }
+    }
+
     fclose(writeFile);
     fclose(readFile);
 

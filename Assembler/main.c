@@ -231,7 +231,7 @@ int parse_file(char* filename, int mode){
     FILE *writeFile;
 
     readFile = fopen(filename,"r");
-    writeFile = fopen("output.bin", "w");
+    writeFile = fopen("output.mif", "w");
 
     if( readFile == NULL || writeFile == NULL){
         perror("Error while opening the file.\n");

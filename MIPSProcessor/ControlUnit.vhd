@@ -14,7 +14,8 @@ ENTITY Control_Unit IS
     ALUOp : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
     MemWrite : OUT STD_LOGIC;
     ALUSrc : OUT STD_LOGIC;
-    RegWrite : OUT STD_LOGIC);
+    RegWrite : OUT STD_LOGIC;
+    WordByte : OUT STD_LOGIC);
 
 END Control_Unit;
 
@@ -38,6 +39,7 @@ BEGIN
   BranchNotEqual <=BNE;
   MemtoReg <= LW;
   ALUOp(1) <= R_Type;
+  WordByte <=LW OR SW;
   ALUOp(0) <= BEQ OR BNE;
   MemWrite <= SW;
   ALUSrc <= LW OR SW OR ADDI;

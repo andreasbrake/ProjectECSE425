@@ -12,6 +12,7 @@
 #include "dictionary.h"
 
 #define EMPTY_WORD "00000000000000000000000000000000"
+#define OUTPUT_FILE "Prog.dat"
 
 int lineNumber = 0;
 
@@ -105,7 +106,7 @@ int parse_line(char input[]){
             continue;
         }
         else if(input[i] == ','){           // End of register or value
-            char* word = malloc(5);         // allocate memory for the register/immediate/etc
+            char* word = (char*)malloc(5);         // allocate memory for the register/immediate/etc
             convert_to_binary(lineNumber, inst, 5, &word);  // Convert it to binary
             add_to_word(word);              // Add it to the binary line
 
@@ -196,7 +197,7 @@ int parse_line_labels(char input[]){
     int i;
 
     //char label[32];
-    char* label = malloc(32 * sizeof(char));
+    char* label = (char*)malloc(32 * sizeof(char));
     label[0] = '\0';
 
     // Iterate over each character in the line
@@ -231,7 +232,7 @@ int parse_file(char* filename, int mode){
     FILE *writeFile;
 
     readFile = fopen(filename,"r");
-    writeFile = fopen("output.mif", "w");
+    writeFile = fopen(OUTPUT_FILE, "w");
 
     if( readFile == NULL || writeFile == NULL){
         perror("Error while opening the file.\n");

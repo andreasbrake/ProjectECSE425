@@ -24,6 +24,10 @@ COMPONENT instruction_fetch
         clock        : IN STD_LOGIC;
         reset        : IN STD_LOGIC;
 
+        stall_inst   : IN STD_LOGIC_VECTOR(31 downto 0);
+        pc_back      : IN STD_LOGIC_VECTOR(9 downto 0);
+        pc_out       : OUT STD_LOGIC_VECTOR(9 downto 0);
+
         pc_plus_out  : OUT STD_LOGIC_VECTOR(9 downto 0);
         instruction  : OUT STD_LOGIC_VECTOR(31 downto 0));
 END COMPONENT;
@@ -33,10 +37,14 @@ COMPONENT instruction_decode
         write_data      : IN STD_LOGIC_VECTOR(31 downto 0);
         write_register  : IN STD_LOGIC_VECTOR(4 downto 0);
         pc_plus_4_in    : IN STD_LOGIC_VECTOR(9 downto 0);
-        
+        pc_in           : IN STD_LOGIC_VECTOR(9 downto 0);
+
         reg_write_in    : IN STD_LOGIC;
         reset           : IN STD_LOGIC;
         clock           : IN STD_LOGIC;
+
+        -- FORWARDING OUTPUT--
+        id_ex_rs        : OUT STD_LOGIC_VECTOR(4 downto 0);
 
         -- CONTROL UNIT OUTPUTS --------
         -- EX
@@ -55,7 +63,12 @@ COMPONENT instruction_decode
         reg_write_out   : OUT STD_LOGIC;
         --------------------------------
 
+        mem_read_in     : IN STD_LOGIC;
+        reg_rt_in       : IN STD_LOGIC_VECTOR(4 downto 0);
         stall_out       : OUT STD_LOGIC;
+        if_flush        : OUT STD_LOGIC;
+        stall_inst      : OUT STD_LOGIC_VECTOR(31 downto 0);   
+        pc_back         : OUT STD_LOGIC_VECTOR(9 downto 0);
 
         read_data1      : OUT STD_LOGIC_VECTOR(31 downto 0);
         read_data2      : OUT STD_LOGIC_VECTOR(31 downto 0);
@@ -97,6 +110,23 @@ COMPONENT instruction_execute
         reg_write_out  : OUT STD_LOGIC;
         ---------------------------------
 
+        mem_read_back  : OUT STD_LOGIC;
+        reg_rt_back    : OUT STD_LOGIC_VECTOR(4 downto 0);
+
+        -- FORWARDING UNIT INPUTS -------
+        ex_mem_rd       : IN STD_LOGIC_VECTOR(4 downto 0);
+        ex_mem_regwrite : IN STD_LOGIC;
+        mem_wb_rd       : IN STD_LOGIC_VECTOR(4 downto 0);
+        mem_wb_regwrite : IN STD_LOGIC;
+        
+        if_id_rs        : IN STD_LOGIC_VECTOR(4 downto 0);
+        ---------------------------------
+        
+        -- FORWARDING MUX INPUTS --------
+        ex_mem_alu_in : IN STD_LOGIC_VECTOR(31 downto 0); -- output from alu in mem stage for forwarding mux
+        wb_mux_out    : IN STD_LOGIC_VECTOR(31 downto 0); -- output from wb stage for forwarding mux
+        ---------------------------------
+
         next_pc        : OUT STD_LOGIC_VECTOR(9 downto 0);
         alu_result     : OUT STD_LOGIC_VECTOR(31 downto 0);
         alu_zero       : OUT STD_LOGIC;
@@ -135,6 +165,12 @@ COMPONENT data_memory
         mem_to_reg_out  : OUT STD_LOGIC;
         reg_write_out   : OUT STD_LOGIC;
         --------------------------------
+
+        ---OUTPUTS FOR FORWARDING UNIT--------
+        ex_mem_rd          : OUT STD_LOGIC_VECTOR(4 downto 0);
+        ex_mem_regwrite    : OUT STD_LOGIC;   
+        address_forwarding : OUT STD_LOGIC_VECTOR(31 downto 0);
+        --------------------------------------
 
         pc_src_out      : OUT STD_LOGIC;
         
@@ -194,6 +230,9 @@ signal reg_write_4   : STD_LOGIC;
 -- IF/ID --
 signal pc_plus_1     : STD_LOGIC_VECTOR(9 downto 0);
 signal instruction   : STD_LOGIC_VECTOR(31 downto 0);
+signal stall_inst    : STD_LOGIC_VECTOR(31 downto 0);
+signal pc_back       : STD_LOGIC_VECTOR(9 downto 0);
+signal pc_out        : STD_LOGIC_VECTOR(9 downto 0);
 -----------
 
 -- ID/EX --
@@ -203,6 +242,10 @@ signal r_data_2      : STD_LOGIC_VECTOR(31 downto 0);
 signal sgnx          : STD_LOGIC_VECTOR(31 downto 0);
 signal wreg_dst_1    : STD_LOGIC_VECTOR(4 downto 0);
 signal wreg_dst_2    : STD_LOGIC_VECTOR(4 downto 0);
+
+signal fwd_id_ex_rs  : STD_LOGIC_VECTOR(4 downto 0);
+signal mem_read_haz  : STD_LOGIC;
+signal reg_rt_haz    : STD_LOGIC_VECTOR(4 downto 0);
 -----------
 
 -- EX/MEM --
@@ -211,6 +254,10 @@ signal zero          : STD_LOGIC;
 signal mem_addr      : STD_LOGIC_VECTOR(31 downto 0);
 signal mem_data      : STD_LOGIC_VECTOR(31 downto 0);
 signal w_reg_1       : STD_LOGIC_VECTOR(4 downto 0);
+
+signal fwd_ex_mem_rd : STD_LOGIC_VECTOR(4 downto 0);
+signal fwd_ex_mem_regwrite : STD_LOGIC;
+signal fwd_address : STD_LOGIC_VECTOR(31 downto 0);
 ------------
 
 -- MEM/WB --
@@ -226,6 +273,7 @@ signal pc_src        : STD_LOGIC := '0';
 signal wb_data       : STD_LOGIC_VECTOR(31 downto 0);
 signal wb_reg        : STD_LOGIC_VECTOR(4 downto 0);
 signal stall         : STD_LOGIC;
+signal if_flush      : STD_LOGIC;
 --------------
 
 -- GEN INS --
@@ -244,7 +292,10 @@ ifetch: instruction_fetch
         stall        => stall,
         clock        => clock,
         reset        => reset,
-
+        stall_inst   => stall_inst,
+        pc_back      => pc_back,
+        pc_out       => pc_out,
+        
         pc_plus_out  => pc_plus_1,
         instruction  => instruction);
 
@@ -253,10 +304,15 @@ idecode: instruction_decode
         write_data      => wb_data,
         write_register  => wb_reg,
         pc_plus_4_in    => pc_plus_1,
+        pc_in           => pc_out,
         
         reg_write_in    => reg_write_4,
         reset           => reset,
         clock           => clock,
+
+        -- FORWARDING OUTPUT --
+        id_ex_rs        => fwd_id_ex_rs,
+        ------------------------y
 
         -- CONTROL UNIT OUTPUTS --------
         -- EX
@@ -275,7 +331,13 @@ idecode: instruction_decode
         reg_write_out   => reg_write_1,
         --------------------------------
 
+        mem_read_in     => mem_read_haz,
+        reg_rt_in       => reg_rt_haz,
         stall_out       => stall,
+        if_flush        => if_flush,
+        stall_inst      => stall_inst,
+        pc_back         => pc_back,
+
         read_data1      => r_data_1,
         read_data2      => r_data_2,
         wreg_dst_out1   => wreg_dst_1,
@@ -315,6 +377,23 @@ iexecute: instruction_execute
         reg_write_out  => reg_write_2,
         ---------------------------------
 
+        mem_read_back  => mem_read_haz,
+        reg_rt_back    => reg_rt_haz,
+
+        ---------FORWARDING UNIT INPUTS--------
+        ex_mem_rd       => fwd_ex_mem_rd,
+        ex_mem_regwrite => fwd_ex_mem_regwrite,
+        mem_wb_rd       => wb_reg,
+        mem_wb_regwrite => reg_write_4,
+        
+        if_id_rs        => fwd_id_ex_rs, 
+        ---------------------------------
+
+        ---------FORWARDING MUX INPUTS--------
+        ex_mem_alu_in   => fwd_address,
+        wb_mux_out      => wb_data,
+        ---------------------------------
+
         next_pc        => next_pc_1,
         alu_result     => mem_addr,
         alu_zero       => zero,
@@ -352,6 +431,11 @@ mem: data_memory
         mem_to_reg_out  => mem_to_reg_3,
         reg_write_out   => reg_write_3,
         --------------------------------
+
+        ---OUTPUTS FOR FORWARDING UNIT--------
+        ex_mem_rd          => fwd_ex_mem_rd,  
+        ex_mem_regwrite    => fwd_ex_mem_regwrite,
+        address_forwarding => fwd_address,
 
         pc_src_out      => pc_src,
         

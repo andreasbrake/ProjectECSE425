@@ -41,16 +41,18 @@ begin
                 registers(i) <= "00000000000000000000000000000000";
             END LOOP;
         else
+            -- READS REGISTERS AT READ_REGISTER VALUE
             read_data1 <= registers(to_integer(unsigned(read_register1)));
             read_data2 <= registers(to_integer(unsigned(read_register2)));
 
             if reg_write = '1' then
+                -- WRITE REGISTER AND READ THEM IF WRITE/READ ARE CONCURRENT FOR SAME REGISTER
                 registers(to_integer(unsigned(write_register))) <= write_data;
                 if read_register1 = write_register then
-                    --read_data1 <= write_data;
+                    read_data1 <= write_data;
                 end if;
                 if read_register2 = write_register then
-                    --read_data2 <= write_data;
+                    read_data2 <= write_data;
                 end if;
             end if;
         end if;

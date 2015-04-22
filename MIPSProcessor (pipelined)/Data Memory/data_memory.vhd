@@ -16,21 +16,14 @@ ENTITY data_memory IS
         mem_address_out : OUT STD_LOGIC_VECTOR(31 downto 0);
 
         -- CARRY THROUGHS
-        next_pc_in      : IN  STD_LOGIC_VECTOR(9 downto 0);
-        next_pc_out     : OUT STD_LOGIC_VECTOR(9 downto 0);
         reg_mux_in      : IN  STD_LOGIC_VECTOR(4 downto 0);
         reg_mux_out     : OUT STD_LOGIC_VECTOR(4 downto 0);
         -----------------
-
-        zero            : IN STD_LOGIC;
 
         -- INPUTS FROM  THE CONTROL UNIT
         -- MEM
         mem_read        : IN STD_LOGIC;
         mem_write       : IN STD_LOGIC;
-        branch          : IN STD_LOGIC;
-        branch_ne       : IN STD_LOGIC;
-        jump            : IN STD_LOGIC;
         -- WB
         mem_to_reg_in   : IN STD_LOGIC;
         reg_write_in    : IN STD_LOGIC;
@@ -42,8 +35,6 @@ ENTITY data_memory IS
         ex_mem_rd          : OUT STD_LOGIC_VECTOR(4 downto 0);
         ex_mem_regwrite    : OUT STD_LOGIC;   
         address_forwarding : OUT STD_LOGIC_VECTOR(31 downto 0);
-
-        pc_src_out      : OUT STD_LOGIC;
         
         reset           : IN STD_LOGIC;
         clock           : IN STD_LOGIC);
@@ -113,8 +104,6 @@ process(clock, reset, mem_state, rd_ready, wr_done)
 begin
 if clock = '1' and clock'event then
     if reset = '1' then
-        pc_src_out <= '1';
-        next_pc_out <= "0000000000";
         state <= '0';
     else
         if state = '0' then
@@ -123,8 +112,6 @@ if clock = '1' and clock'event then
             address_forwarding <= mem_address;
             state <= '1';
         elsif state = '1' then
-            pc_src_out <= (branch and zero) or (branch_ne and not zero) or (jump);
-            next_pc_out <= next_pc_in;
             reg_mux_out <= reg_mux_in;
             mem_address_out <= mem_address;
             read_data_out <= read_data_inter;

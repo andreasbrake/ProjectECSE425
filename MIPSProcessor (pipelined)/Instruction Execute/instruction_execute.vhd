@@ -10,8 +10,7 @@ use ieee.std_logic_unsigned.all;
 use ieee.numeric_std.all;
 
 ENTITY instruction_execute IS
-   PORT(pc_plus_4      : IN STD_LOGIC_VECTOR(9 downto 0);
-        reg_data_0     : IN STD_LOGIC_VECTOR(31 downto 0);
+   PORT(reg_data_0     : IN STD_LOGIC_VECTOR(31 downto 0);
         reg_data_1     : IN STD_LOGIC_VECTOR(31 downto 0);
         sign_extend_in : IN STD_LOGIC_VECTOR(31 downto 0);
         wreg_dst_0     : IN STD_LOGIC_VECTOR(4 downto 0);
@@ -25,14 +24,8 @@ ENTITY instruction_execute IS
         -- MEM
         mem_read_in    : IN STD_LOGIC;
         mem_write_in   : IN STD_LOGIC;
-        branch_in      : IN STD_LOGIC;
-        branch_ne_in   : IN STD_LOGIC;
-        jump_in        : IN STD_LOGIC;
         mem_read_out   : OUT STD_LOGIC;
         mem_write_out  : OUT STD_LOGIC;
-        branch_out     : OUT STD_LOGIC;
-        branch_ne_out  : OUT STD_LOGIC;
-        jump_out       : OUT STD_LOGIC;
         -- WB
         mem_to_reg_in  : IN STD_LOGIC;
         reg_write_in   : IN STD_LOGIC;        
@@ -81,12 +74,6 @@ ARCHITECTURE main of instruction_execute is
             ForwardB        : out std_logic_vector(1 downto 0));     
     end COMPONENT;
 
-    COMPONENT ADDER IS
-    PORT (  A        : in std_logic_vector(9 downto 0);
-            B        : in std_logic_vector(9 downto 0);
-            result   : out std_logic_vector(9 downto 0));
-    END COMPONENT;
-
     COMPONENT ALU IS
     PORT ( in1, in2 : IN  STD_LOGIC_VECTOR(31 DOWNTO 0);
            control  : IN  STD_LOGIC_VECTOR(2 DOWNTO 0);
@@ -95,7 +82,6 @@ ARCHITECTURE main of instruction_execute is
     END COMPONENT;
 
     -- Input signals set on the clock high
-    SIGNAL pc_plus_latched        : std_logic_vector(9 downto 0);
     SIGNAL alu_reg_data0_latched  : std_logic_vector(31 downto 0);
     SIGNAL alu_reg_data1_latched  : std_logic_vector(31 downto 0);
     SIGNAL sign_extended_latched  : std_logic_vector(31 downto 0);
@@ -113,7 +99,6 @@ ARCHITECTURE main of instruction_execute is
     SIGNAL alu_control           : std_logic_vector(2 downto 0);
     SIGNAL funct_code            : std_logic_vector(5 downto 0);
 
-    SIGNAL next_pc_inter         : std_logic_vector(9 downto 0);
     SIGNAL alu_result_inter      : std_logic_vector(31 downto 0);
     SIGNAL state                 : std_logic;
     SIGNAL alu_cont_temp         : std_logic_vector(2 downto 0);
@@ -137,12 +122,9 @@ BEGIN
             ForwardA        => forwardA, 
             ForwardB        => forwardB);
 
-    add: ADDER PORT MAP(
-            A        => pc_plus_latched,
-            B        => shifted_sign_extend,
-            result   => next_pc_inter);
+
     a1u: ALU PORT MAP(
-            in1      => alu_reg_data0_latched,
+            in1      => reg_data_0,
             in2      => alu_mux_out,
             control  => alu_control,
             result   => alu_result_inter,
@@ -153,9 +135,9 @@ BEGIN
     shifted_sign_extend (1 downto 0) <= "00";
 
     -- MUX computations
-    with forwardA SELECT alu_mux_out_1 <= alu_reg_data0_latched WHEN "00", wb_mux_out  WHEN "01", ex_mem_alu_in WHEN OTHERS; 
-    with forwardB SELECT inter_alu_mux <= alu_reg_data1_latched WHEN "00", wb_mux_out  WHEN "01", ex_mem_alu_in WHEN OTHERS; 
-    with alu_src select alu_mux_out <= inter_alu_mux when '0', sign_extended_latched when others;
+    with forwardA SELECT alu_mux_out_1 <= reg_data_0    WHEN "00", wb_mux_out     WHEN "01", ex_mem_alu_in WHEN OTHERS; 
+    with forwardB SELECT inter_alu_mux <= reg_data_1    WHEN "00", wb_mux_out     WHEN "01", ex_mem_alu_in WHEN OTHERS; 
+    with alu_src  SELECT alu_mux_out   <= inter_alu_mux WHEN '0',  sign_extend_in WHEN OTHERS; 
     
     with reg_dst select wreg_dst_out_tmp <= wreg_dst_0 when '0', wreg_dst_1 when others;
 
@@ -163,12 +145,11 @@ BEGIN
     -- ALU Control Bits
 
     funct_code     <= sign_extended_latched(5 downto 0);
-    alu_cont_temp <= ((funct_code(1) AND alu_op_latched(1)) OR alu_op_latched(0)) & (( NOT funct_code(2) ) OR ( NOT alu_op_latched(1) ) ) & (( funct_code(1) AND funct_code(3) AND alu_op_latched(1) ) OR ( funct_code(0) AND funct_code(2) AND alu_op_latched(1) ));
+    alu_cont_temp  <= ((funct_code(1) AND alu_op_latched(1)) OR alu_op_latched(0)) & (( NOT funct_code(2) ) OR ( NOT alu_op_latched(1) ) ) & (( funct_code(1) AND funct_code(3) AND alu_op_latched(1) ) OR ( funct_code(0) AND funct_code(2) AND alu_op_latched(1) ));
 
-    control_case <= funct_code & alu_op_latched;
+    control_case   <= funct_code & alu_op_latched;
 
-    with control_case select  
-    alu_control <= "011" when "01100010", alu_cont_temp when others;
+    with control_case select alu_control <= "011" when "01100010", alu_cont_temp when others;
     -----------------------------------------------------------------------
 
 -- 
@@ -180,14 +161,14 @@ BEGIN
             state <= '0';
         elsif state = '0' then
             -- BURN A CYCLE TO KEEP IN TIME
-            pc_plus_latched       <= pc_plus_4;
             alu_reg_data0_latched <= reg_data_0;
             alu_reg_data1_latched <= reg_data_1;
             sign_extended_latched <= sign_extend_in;
             alu_op_latched        <= alu_op;
             mem_read_back         <= mem_read_in;
             reg_rt_back           <= wreg_dst_0;
-
+	
+            alu_result     <= alu_result_inter;
             state <= '1';
         elsif state = '1' then
             -- Latch values from the input signals, muxs, and control bits
@@ -198,13 +179,9 @@ BEGIN
             -- PASSING ON CONTROL BITS
             mem_read_out   <= mem_read_in;
             mem_write_out  <= mem_write_in;
-            branch_out     <= branch_in;
-            branch_ne_out  <= branch_ne_in;
-            jump_out       <= jump_in;
             mem_to_reg_out <= mem_to_reg_in;
             reg_write_out  <= reg_write_in;
-            next_pc        <= next_pc_inter;
-            alu_result     <= alu_result_inter;
+            
 
             state <= '0';
         end if;

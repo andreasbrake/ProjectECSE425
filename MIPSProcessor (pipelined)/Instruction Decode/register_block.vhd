@@ -13,11 +13,11 @@ ENTITY register_block IS
    PORT(read_register1 	: IN STD_LOGIC_VECTOR(4 downto 0);
         read_register2 	: IN STD_LOGIC_VECTOR(4 downto 0);
 
-        write_register	 : IN STD_LOGIC_VECTOR(4 downto 0);
+        write_register  : IN STD_LOGIC_VECTOR(4 downto 0);
         write_data      : IN STD_LOGIC_VECTOR(31 downto 0);
         reg_write       : IN STD_LOGIC;
 		
-		reset           : IN STD_LOGIC;
+        reset           : IN STD_LOGIC;
         clock           : IN STD_LOGIC;
 		
         read_data1      : OUT STD_LOGIC_VECTOR(31 downto 0);
@@ -31,21 +31,29 @@ signal registers : register_file;
 BEGIN
 
 -- REG#0 ALWAYS ZERO
-registers(0) <= "00000000000000000000000000000000";
+-- registers(0) <= "00000000000000000000000000000000";
 
 regFile : process(reg_write, clock, write_data, read_register1, read_register2) is
 begin
-    if clock = '0' and clock'event then
+    if clock = '1' and clock'event then
         if reset = '1' then
             FOR i IN 0 TO 31 LOOP
                 registers(i) <= "00000000000000000000000000000000";
             END LOOP;
         else
             -- READS REGISTERS AT READ_REGISTER VALUE
-            read_data1 <= registers(to_integer(unsigned(read_register1)));
-            read_data2 <= registers(to_integer(unsigned(read_register2)));
+            if read_register1 /= "00000" then
+                read_data1 <= registers(to_integer(unsigned(read_register1)));
+            else
+                read_data1 <= "00000000000000000000000000000000";
+            end if;
+            if read_register2 /= "00000" then
+                read_data2 <= registers(to_integer(unsigned(read_register2)));
+            else
+                read_data2 <= "00000000000000000000000000000000";
+            end if;
 
-            if reg_write = '1' then
+            if reg_write = '1' and write_register /= "00000" then
                 -- WRITE REGISTER AND READ THEM IF WRITE/READ ARE CONCURRENT FOR SAME REGISTER
                 registers(to_integer(unsigned(write_register))) <= write_data;
                 if read_register1 = write_register then

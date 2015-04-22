@@ -14,7 +14,6 @@ ENTITY instruction_decode IS
    PORT(instruction     : IN STD_LOGIC_VECTOR(31 downto 0);
         write_data      : IN STD_LOGIC_VECTOR(31 downto 0);
         write_register  : IN STD_LOGIC_VECTOR(4 downto 0);
-        pc_plus_4_in    : IN STD_LOGIC_VECTOR(9 downto 0);
         pc_in           : IN STD_LOGIC_VECTOR(9 downto 0);
 
         reg_write_in    : IN STD_LOGIC;
@@ -32,9 +31,6 @@ ENTITY instruction_decode IS
         -- MEM
         mem_read_out    : OUT STD_LOGIC;
         mem_write_out   : OUT STD_LOGIC;
-        branch_out      : OUT STD_LOGIC;
-        branch_ne_out   : OUT STD_LOGIC;
-        jump_out        : OUT STD_LOGIC;
         word_byte_out   : OUT STD_LOGIC;
         -- WB       
         mem_to_reg_out  : OUT STD_LOGIC;
@@ -45,8 +41,6 @@ ENTITY instruction_decode IS
         mem_read_in     : IN STD_LOGIC;
         reg_rt_in       : IN STD_LOGIC_VECTOR(4 downto 0);
         stall_out       : OUT STD_LOGIC;
-        stall_inst      : OUT STD_LOGIC_VECTOR(31 downto 0);    -- WRITES INST BACK TO IF
-        pc_back         : OUT STD_LOGIC_VECTOR(9 downto 0);     -- WRITES PC BACK TO IF
         if_flush        : OUT STD_LOGIC;
         ---------------------------------------
 
@@ -55,7 +49,9 @@ ENTITY instruction_decode IS
         wreg_dst_out1   : OUT STD_LOGIC_VECTOR(4 downto 0);
         wreg_dst_out2   : OUT STD_LOGIC_VECTOR(4 downto 0);
         sign_extend_out : OUT STD_LOGIC_VECTOR(31 downto 0);
-        pc_plus_4_out   : OUT STD_LOGIC_VECTOR(9 downto 0));
+	
+	branch          : OUT STD_LOGIC;
+        next_pc         : OUT STD_LOGIC_VECTOR(9 downto 0));
 END instruction_decode;
 
 ARCHITECTURE main of instruction_decode is
@@ -77,7 +73,7 @@ END COMPONENT;
 
 COMPONENT Control_Unit
     PORT (
-        opcode     : IN STD_LOGIC_VECTOR(5 DOWNTO 0);
+        instruction: IN STD_LOGIC_VECTOR(31 DOWNTO 0);
 
         alu_op     : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
         alu_src    : OUT STD_LOGIC;
@@ -102,25 +98,28 @@ COMPONENT Control_Unit
         reg_rs      : IN STD_LOGIC_VECTOR(4 downto 0);
         reg_rt      : IN STD_LOGIC_VECTOR(4 downto 0);
         reg_rd      : IN STD_LOGIC_VECTOR(4 downto 0);
-        curr_npc    : IN STD_LOGIC_VECTOR(9 downto 0);
         stall_out   : OUT STD_LOGIC;
-        stall_npc   : OUT STD_LOGIC_VECTOR(9 downto 0);
         --------------------
 
         clock       : IN STD_LOGIC;
         reset       : IN STD_LOGIC);
 END COMPONENT;
 
+COMPONENT ADDER IS
+    PORT (  A        : in std_logic_vector(9 downto 0);
+            B        : in integer;
+            result   : out std_logic_vector(9 downto 0));
+END COMPONENT;
+
+
 signal pc_plus_latched   : std_logic_vector(9 downto 0);
 
 signal opcode_latched    : std_logic_vector(5 downto 0);
-signal sx_in_latched     : std_logic_vector(15 downto 0);
 signal sx_out_latched    : std_logic_vector(31 downto 0);
-signal wreg0_out_latched : std_logic_vector(4 downto 0);
-signal wreg1_out_latched : std_logic_vector(4 downto 0);
+signal branch_pc         : std_logic_vector(9 downto 0);
 signal state             : std_logic;
-signal stall             : std_logic;
-signal stall_npc         : std_logic_vector(9 downto 0);
+signal stall             : std_logic := '0';
+signal zero              : std_logic := '0';
 signal stall_instruction : std_logic_vector(31 downto 0);
 signal stall_inst_int    : std_logic_vector(31 downto 0);
 
@@ -129,18 +128,29 @@ signal inst_internal     : std_logic_vector(31 downto 0);
 signal read_data_inter1  : std_logic_vector(31 downto 0);
 signal read_data_inter2  : std_logic_vector(31 downto 0);
 
+signal jump              : std_logic := '0';
+signal branch_eq         : std_logic := '0';
+signal branch_neq        : std_logic := '0';
+signal branch_int        : std_logic := '0';
+
+signal flag_comb         : std_logic_vector(1 downto 0);
+signal data_diff         : std_logic_vector(31 downto 0);
+
+signal pc_increase       : integer;
+
+signal read_reg_1        : std_logic_vector(4 downto 0);
+signal read_reg_2        : std_logic_vector(4 downto 0);
+
 BEGIN
 
 
 -- SET VALUES
-pc_plus_4_out  <= pc_plus_latched;
 stall_out      <= stall;
-wreg_dst_out1  <= wreg0_out_latched;
-wreg_dst_out2  <= wreg1_out_latched;
+data_diff      <= read_data_inter1 - read_data_inter2;
 
 reg: register_block PORT MAP (
-        read_register1 => inst_internal(25 downto 21),
-        read_register2 => inst_internal(20 downto 16),
+        read_register1 => instruction(25 downto 21),
+        read_register2 => instruction(20 downto 16),
         write_register => write_register,
         write_data     => write_data,
         reg_write      => reg_write_in,
@@ -151,15 +161,15 @@ reg: register_block PORT MAP (
         read_data2     => read_data_inter2);
 
 con: control_unit PORT MAP(
-        opcode     => opcode_latched,
+        instruction     => instruction,
 
         alu_op     => alu_op_out,
         alu_src    => alu_src_out,
         reg_dst    => reg_dst_out,
 
-        jump       => jump_out,
-        branch     => branch_out,
-        branch_ne  => branch_ne_out,
+        jump       => jump,
+        branch     => branch_eq,
+        branch_ne  => branch_neq,
 
         mem_read   => mem_read_out,
         mem_write  => mem_write_out,
@@ -176,65 +186,62 @@ con: control_unit PORT MAP(
         reg_rs     => instruction(25 downto 21),
         reg_rt     => instruction(20 downto 16),
         reg_rd     => instruction(15 downto 11),
-        curr_npc   => pc_plus_latched,
         stall_out  => stall,
-        stall_npc  => stall_npc,
         --------------------
 
         clock      => clock,
         reset      => reset);
+
+pc_branch: ADDER PORT MAP(
+        A        => pc_in,
+        B        => pc_increase,
+        result   => branch_pc);
+
+WITH data_diff SELECT zero <= '1' WHEN "00000000000000000000000000000000", '0' WHEN OTHERS;
+branch_int <= jump or (branch_eq and zero) or (branch_neq and (not zero)) ;
+branch <= branch_int;
+
+flag_comb <= branch_int & stall;
+next_pc <= branch_pc WHEN flag_comb = "10" ELSE pc_in;
+--WITH (branch_int & stall) SELECT next_pc <= branch_pc WHEN "10", pc_int WHEN OTHERS;
 
 process(clock)
 begin
     if clock = '1' and clock'event then
         if reset = '1' then -- ON RESET, SET INITIAL VALUES
             state <= '0';
-            pc_plus_latched   <= "0000000100";
-
-            opcode_latched    <= "000000";
-            wreg0_out_latched <= "00000";
-            wreg1_out_latched <= "00000";
-            sx_in_latched     <= "0000000000000000";
-
-            inst_internal <= instruction;
-            stall_inst    <= instruction;
-            pc_back       <= pc_in;
-
-            state <= '0';
         elsif state = '0' then
-            -- BURN A CYCLE TO KEEP IN TIME
-            
-            sx_in_latched     <= inst_internal(15 downto 0);
-            pc_plus_latched   <= pc_plus_4_in;
+            -- BLANK ON STALL
+            if branch_int = '1' and stall = '0' then
+                if jump = '1' and instruction(31 downto 26) = "00000" then
+                    pc_increase <= (to_integer(signed(instruction(15 downto 11))) * 4);
+                else
+                    pc_increase <= (to_integer(signed(instruction(15 downto 0))) * 4); 
+                end if;
+            end if;
 
-            inst_internal <= instruction;
-            stall_inst    <= instruction;
-            pc_back       <= pc_in;
+            -- LATCH VALUES TO BE PASSED OUT TO EX
+            wreg_dst_out1 <= instruction(20 downto 16);
+            wreg_dst_out2 <= instruction(15 downto 11);
+	    
+	    sx_out_latched <= std_logic_vector(resize(signed(instruction(15 downto 0)), sx_out_latched'length));
 
+            id_ex_rs      <= instruction(25 downto 21);
+	    
             state <= '1';
         elsif state = '1' then
-            -- LATCH VALUES TO BE PASSED OUT TO EX
-            opcode_latched    <= inst_internal(31 downto 26);
-            wreg0_out_latched <= inst_internal(20 downto 16);
-            wreg1_out_latched <= inst_internal(15 downto 11);
-
-            id_ex_rs          <= inst_internal(25 downto 21);
-
-            inst_internal <= instruction;
-            stall_inst    <= instruction;
-
             -- BLANK ON STALL
             if stall = '1' then
                 sign_extend_out <= "00000000000000000000000000000000";
-                read_data1      <= "00000000000000000000000000000000";
-                read_data2      <= "00000000000000000000000000000000";
+                read_data1 <= read_data_inter1;
+                read_data2 <= read_data_inter2;
             else
-                sign_extend_out <= std_logic_vector(resize(signed(sx_in_latched), sx_out_latched'length));
+                sign_extend_out <= sx_out_latched;
                 
                 read_data1 <= read_data_inter1;
                 read_data2 <= read_data_inter2;
             end if;
-
+           
             state <= '0';
         end if;
     end if;

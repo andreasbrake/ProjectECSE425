@@ -4,24 +4,15 @@ USE IEEE.numeric_std.ALL;
 
 ENTITY ADDER IS
     PORT ( A      : in std_logic_vector(9 downto 0);
-	   B      : in std_logic_vector(9 downto 0);
+	   B      : in integer;
 	   result : out std_logic_vector(9 downto 0));
 END ADDER;
 
 ARCHITECTURE behavior of  ADDER is
-
+    signal result_unsigned : Integer;
 BEGIN
 
-PROCESS(A, B)
-
-    VARIABLE result_unsigned : unsigned(10 downto 0); -- Set to 11 bits instead of 10 in order to handle end-case overflow
-
-BEGIN
-	-- ADD YO!
-    result_unsigned  := "00000000000" + unsigned(signed(A) + signed(B));
-    result         <= std_logic_vector(result_unsigned(9 downto 0));
-	
-END PROCESS;
-
+result_unsigned <= to_integer(signed(A)) + B;
+result <= std_logic_vector(to_signed(result_unsigned, result'length));
 
 end behavior;

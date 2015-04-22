@@ -29,8 +29,6 @@ END writeback;
 
 ARCHITECTURE main of writeback is
 
-signal write_data0_latched : std_logic_vector(31 downto 0);
-signal write_data1_latched : std_logic_vector(31 downto 0);
 signal mem_to_reg_latched  : std_logic;
 
 signal wb_data_x           : std_logic_vector(31 downto 0);
@@ -44,29 +42,22 @@ signal state               : std_logic;
 BEGIN
 
 -- Writeback
-with mem_to_reg_latched select wb_data_x <= write_data0_latched when '1', write_data1_latched when others;
+with mem_to_reg select write_back <= write_data0 when '1', write_data1 when others;
 
-process(clock)
+process(clock, write_reg_in)
 begin
+    write_register <= write_reg_in;
+    reg_write_out       <= reg_write_in;
+
     if clock = '1' and clock'event then
         -- Reset to output zero
         if reset = '1' then
             mem_to_reg_latched  <= '0';
-            write_data0_latched <= "00000000000000000000000000000000";
-            write_data1_latched <= "00000000000000000000000000000000";
-            state               <= '0';
-        elsif state = '0' then
-            -- BURN A CYCLE TO STAY IN TIME
-            write_data0_latched <= write_data0;
-            write_data1_latched <= write_data1;
-            mem_to_reg_latched  <= mem_to_reg; 
-            wb_reg_x            <= write_reg_in;
-            state               <= '1';
-        elsif state = '1' then
-            write_back     <= wb_data_x;
-            write_register <= wb_reg_x;
-            reg_write_out <= reg_write_in;
-            state          <= '0';
+        else
+            -- SEND TO ID TO WRITE THE REGISTER
+            mem_to_reg_latched  <= mem_to_reg;
+            --write_back          <= wb_data_x;
+            
         end if;  
     end if;
 end process;

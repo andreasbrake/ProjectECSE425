@@ -5,17 +5,15 @@ use ieee.numeric_std.all;
 
 ENTITY instruction_fetch IS
     PORT(
-        pc_in        : IN STD_LOGIC_VECTOR(9 downto 0) := "0000000000";
+        pc_in        : IN STD_LOGIC_VECTOR(9 downto 0);
         
         stall        : IN STD_LOGIC;
         clock        : IN STD_LOGIC;
         reset        : IN STD_LOGIC;
 
-        stall_inst   : IN STD_LOGIC_VECTOR(31 downto 0);
-        pc_back      : IN STD_LOGIC_VECTOR(9 downto 0);
+        branch       : IN STD_LOGIC;
         pc_out       : OUT STD_LOGIC_VECTOR(9 downto 0);
 
-        pc_plus_out  : OUT STD_LOGIC_VECTOR(9 downto 0);
         instruction  : OUT STD_LOGIC_VECTOR(31 downto 0));
 END instruction_fetch;
 
@@ -35,7 +33,6 @@ COMPONENT instruction_memory IS
     PORT(
         instruction  : OUT STD_LOGIC_VECTOR(31 downto 0);
         PC           : IN STD_LOGIC_VECTOR(9 downto 0);
-        read_in      : IN STD_LOGIC;
         clock        : IN std_logic;
         init         : IN std_logic);
 END COMPONENT;
@@ -46,33 +43,58 @@ mem: instruction_memory
     PORT MAP(
         instruction  => INST_INTERNAL,
         PC           => PC_IN_LATCHED,
-        read_in      => stall,
         clock        => clock,
         init         => reset);
 
--- ADD FOUR
-PC_PLUS_FOUR <= (PC_IN_LATCHED + "00000000100");
-PC_PLUS_OUT  <= PC_OUT_LATCHED;
-
-process(clock, reset)
+process(clock, stall, reset)
 begin
+    if branch = '1' or stall = '1' then -- ON A STALL, USE VALUES SENT BACK BY ID
+        if stall = '1' then
+            instruction   <= INST_PREVIOUS;
+        end if;
+	
+    end if;
+
     if clock = '1' and clock'event then
-        if stall = '1' then -- ON A STALL, USE VALUES SENT BACK BY ID
-            PC_IN_LATCHED <= pc_back;
-            instruction    <= stall_inst;
-        elsif reset = '1' then
+        if reset = '1' then
             PC_IN_LATCHED <= "0000000000";
+            PC_PLUS_FOUR  <= "00000000100";
             state <= '0';
         elsif state = '0' then -- USE STATES TO GET PROPER TIMING FOR INPUTS/OUTPUTS
-            PC_IN_LATCHED <= PC_IN;
-            PC_OLDER <= PC_PREVIOUS;
+            if branch = '1' or stall = '1' then
+                
+            else
+                PC_IN_LATCHED <= PC_PLUS_FOUR(9 downto 0); 
+                PC_PLUS_FOUR  <= (PC_PLUS_FOUR(9 downto 0) + "00000000100");
+            end if;
+	    
             state <= '1';
         elsif state = '1' then
-            PC_OUT_LATCHED <= PC_PLUS_FOUR(9 downto 0);
+            if stall = '1' then
+                instruction   <= INST_PREVIOUS;
+            else
+                if INST_INTERNAL(0) /= 'U' then 
+                    INST_PREVIOUS <= INST_INTERNAL;
+                    instruction   <= INST_INTERNAL;
+                else -- INST INTNERNAL CAN BE UNDEFINED AFTER BRANCH SO FLUSH RESULT
+		    INST_PREVIOUS <= "00000000000000000000000000000000";
+                    instruction   <= "00000000000000000000000000000000";
+                end if;
+            end if;
+            
+	    if branch = '1' or stall = '1' then
+		PC_IN_LATCHED <= PC_IN;
+                PC_PLUS_FOUR  <= (PC_IN + "00000000100");
+                if branch = '1' then
+                    INST_PREVIOUS <= "00000000000000000000000000000000";
+                    instruction   <= "00000000000000000000000000000000";
+                end if;
+            end if;
             pc_out <= PC_IN_LATCHED;
-            instruction <= INST_INTERNAL;
             state <= '0';
         end if;
+
+        
     end if;
 end process;
 END arch;

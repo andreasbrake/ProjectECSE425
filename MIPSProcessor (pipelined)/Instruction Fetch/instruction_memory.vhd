@@ -6,7 +6,6 @@ use ieee.numeric_std.all;
 ENTITY instruction_memory IS
   PORT(instruction : OUT STD_LOGIC_VECTOR(31 downto 0);
        PC          : IN STD_LOGIC_VECTOR(9 downto 0);
-       read_in     : IN STD_LOGIC;
        clock       : IN std_logic;
        init        : IN std_logic);
 END instruction_memory;
@@ -50,7 +49,7 @@ mem: main_memory
         address     => PC_int,
         Word_Byte   => '1', -- when '1' you are interacting with the memory in word otherwise in byte
 
-        re          => mem_read_latched,
+        re          => '1', -- ALWAYS READ, ITS THE JOB!
         we          => '0',
         data        => mem_data,       
         initialize  => init,
@@ -67,10 +66,7 @@ begin
         mem_state <= '0';
         mem_data <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
     elsif mem_state = '0' then
-        if read_in /= '1' then -- ALWAYS READ, ITS THE JOB!
-            mem_read_latched <= '1';
-            mem_state <= '1';
-        end if;
+        mem_state <= '1';
         -- SET DATA TO 'Z's WHEN NOT IN USE
         mem_data <= "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
     elsif mem_state = '1' then

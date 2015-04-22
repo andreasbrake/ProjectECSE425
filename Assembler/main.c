@@ -10,15 +10,21 @@
 #include <string.h>
 
 #include "dictionary.h"
+#include "scheduler.h"
 
 #define EMPTY_WORD "00000000000000000000000000000000"
-#define OUTPUT_FILE "Prog.dat"
+#define OUTPUT_FILE "Init.dat"
 
 int lineNumber = 0;
+int fileLineNum = 0;
 
 char* lineWord;
 int pos = 0;
 int wordType = 0;
+
+int progLength = 0;
+int* labelLines;
+int labelCount = 0;
 
 // Add a binary instruction to the current binary line word
 // Certain order for each part being read
@@ -67,7 +73,18 @@ int add_to_word(char* bin){
     for(i=0; i<len; i++){
         lineWord[(offset+i)] = bin[i];
     }
-
+    
+    if(pos == 1){ // Second increment for mult as there's no rd
+        char op[7];
+        char fun[7];
+        memcpy(op, &lineWord[0], 6);
+        memcpy(fun, &lineWord[26], 6);
+        op[6] = '\0';
+        fun[6] = '\0';
+        if(!strcmp(op, "000000") && !strcmp(fun, "011000")){ // mult condition]
+            pos++;
+        } 
+    }
     pos++;
     return 0;
 }
@@ -188,9 +205,30 @@ int parse_line(char input[]){
             add_to_word(thing);
     }
 
-    return 0;
+    return wordType;
 }
 
+int line_has_label(int line){
+    int i;
+    for(i=0; i<labelCount; i++){
+        if(labelLines[i] == line){
+            return 1;
+        }
+    }
+    return 0;
+}
+int add_lable_line_num(int newNum){
+    int* temp = labelLines;
+    labelLines = (int*)malloc(sizeof(int) * (labelCount + 1));
+
+    int i;
+    for(i=0; i<labelCount; i++){
+        labelLines[i] = temp[i];
+    }
+    labelLines[labelCount] = newNum;
+    labelCount++;
+    return 0;
+}
 // This function parses the line for label information
 // input[] is the line data
 int parse_line_labels(char input[]){
@@ -205,6 +243,7 @@ int parse_line_labels(char input[]){
         if(input[i] == '#') // Line is over if comment begins
             break;
         else if(input[i] == ':'){ // line label has been read
+            add_lable_line_num(fileLineNum);
             add_label(label, lineNumber); // Record the label and its location
             break;
         }
@@ -219,22 +258,26 @@ int parse_line_labels(char input[]){
     if(label[0] != '\0'){
         lineNumber++;
     }
-
+    fileLineNum++;
     return 0;
 }
 
 // Parse_file takes in the name of the file to be parsed and the parsing mode
 // Mode: 0 indicates that the program is looking for and recording labels
 // Mode: 1 indicates that the program is parsing the general content of the lines
+// Mode: 2 indicates that the program is parsing and sending lines to the scheduler
 int parse_file(char* filename, int mode){
     char ch;
     FILE *readFile;
     FILE *writeFile;
 
     readFile = fopen(filename,"r");
-    writeFile = fopen(OUTPUT_FILE, "w");
 
-    if( readFile == NULL || writeFile == NULL){
+    if(mode == 1){
+        writeFile = fopen(OUTPUT_FILE, "w");    
+    }
+
+    if(readFile == NULL){
         perror("Error while opening the file.\n");
         exit(EXIT_FAILURE);
     }
@@ -248,12 +291,29 @@ int parse_file(char* filename, int mode){
             if(mode == 0){
                 parse_line_labels(line); // Parse line for label information
             }
-            else{
+            else if(mode == 1){
                 parse_line(line); // Parse line for general content
                 if(strcmp(lineWord, EMPTY_WORD)){ // If the line is empty then don't write it
                     printf("%s\n", lineWord); // For debugging
                     fprintf(writeFile,"%s\n", lineWord); // Write to the write file
+                    ++progLength;
                 }
+            }
+            else if(mode == 2){
+                if(line_has_label(fileLineNum)){
+                    end_subprogram();
+                }
+                int instType = parse_line(line); // Parse line for general content
+                if(strcmp(lineWord, EMPTY_WORD)){ // If the line is empty then don't write it
+                    add_line(lineWord, instType);
+                    char op[6];
+                    memcpy(op, &lineWord[0], 5);
+                    op[5] = '\0';
+                    if(!strcmp(op, "00010")){ // handles beq (000100) and bne (000101)
+                        end_subprogram();
+                    }
+                }
+                ++fileLineNum;
             }
 
             line[0] = '\0'; // Clear the line array
@@ -271,29 +331,47 @@ int parse_file(char* filename, int mode){
         if(mode == 0){
             parse_line_labels(line);
         }
-        else{
+        else if(mode == 1){
             parse_line(line);
             if(strcmp(lineWord, EMPTY_WORD)){
                 printf("%s\n", lineWord);
                 fprintf(writeFile,"%s\n", lineWord);
             }
         }
+        else{
+            if(line_has_label(fileLineNum)){
+                end_subprogram();
+            }
+            int instType = parse_line(line);
+            if(strcmp(lineWord, EMPTY_WORD)){
+                add_line(lineWord, instType);
+            }
+        }
         line[0] = '\0';
     }
 
     // Close files
-    fclose(writeFile);
+    if(mode == 1){
+        fclose(writeFile);
+    }
+    else if(mode == 2){
+        end_subprogram();
+    }
     fclose(readFile);
 
     lineNumber = -1; // Reset line number
+    fileLineNum = 0;
     return 0;
 }
 
 int main(int argc, char* argv[]){
 
-    parse_file(argv[1], 0); // parse for labels
-    init_dictionary();      // Initialize the dictionary of opcodes
-    parse_file(argv[1], 1); // parse for everything else
+    parse_file(argv[1], 0);     // parse for labels
+    init_dictionary();          // Initialize the dictionary of opcodes
+    parse_file(argv[1], 1);     // parse for everything else
+    init_scheduler(progLength); // Initialize static scheduler
+    parse_file(argv[1], 2);     // parse for scheduler
+    schedule_output();
 
     return 0;
 }
